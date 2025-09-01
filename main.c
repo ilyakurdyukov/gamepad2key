@@ -21,12 +21,12 @@ typedef struct {
 	int js_fd;
 	int js_axes, js_buttons;
 
-	int axes_conf_num, thr_conf_num, buttons_conf_num;
-	char **axes_conf, **thr_conf, **buttons_conf;
+	int btn_set2;
+	int *axes_conf[2], *thr_conf, *buttons_conf[2];
 	Display *display;
 
 	char *js_state;
-	int *js_map;
+	int *js_map, *js_map2;
 	int *js_thr;
 } sysctx_t;
 
@@ -47,6 +47,8 @@ static const struct {
 #define X(name) { #name, ABS_##name },
 	X(X) X(Y) X(Z)
 	X(RX) X(RY) X(RZ)
+	X(THROTTLE) X(RUDDER)
+	X(WHEEL) X(GAS) X(BRAKE)
 	X(HAT0X) X(HAT0Y)
 	X(HAT1X) X(HAT1Y)
 	X(HAT2X) X(HAT2Y)
@@ -62,10 +64,51 @@ static const struct {
 	X(A) X(B) X(C) X(X) X(Y) X(Z)
 	X(TL) X(TR) X(TL2) X(TR2)
 	X(SELECT) X(START) X(MODE)
-#ifdef BTN_THUMBL
 	X(THUMBL) X(THUMBR)
-#endif
 #undef X
+	{ NULL, 0 }
+};
+
+#define KEY_SET2 -2
+
+static const struct {
+	const char *name; int val;
+} key_names[] = {
+#define X(name) { #name, XK_##name },
+	X(Left) X(Up) X(Right) X(Down)
+	X(Home) X(Page_Up) X(Page_Down) X(End)
+	X(Insert) X(Delete) X(BackSpace)
+	X(Return) X(Escape) X(Tab)
+	X(space)
+	X(Shift_L) X(Shift_R)
+	X(Control_L) X(Control_R)
+	X(Alt_L) X(Alt_R)
+
+	// aliases
+	{ "Enter", XK_Return },
+	{ "Esc", XK_Escape },
+	{ "Shift", XK_Shift_L },
+	{ "Control", XK_Control_L },
+	{ "Ctrl", XK_Control_L },
+	{ "Alt", XK_Alt_L },
+	{ "PgUp", XK_Page_Up },
+	{ "PgDown", XK_Page_Down },
+
+	X(Caps_Lock)
+	X(F1) X(F2) X(F3) X(F4) X(F5) X(F6)
+	X(F7) X(F8) X(F9) X(F10) X(F11) X(F12)
+
+	X(KP_Enter) X(KP_Home)
+	X(KP_Left) X(KP_Up) X(KP_Right) X(KP_Down)
+	X(KP_Page_Up) X(KP_Page_Down)
+	X(KP_End) X(KP_Insert) X(KP_Delete) X(KP_Equal)
+	X(KP_Multiply) X(KP_Add)
+	X(KP_Separator) X(KP_Subtract) X(KP_Divide)
+	X(KP_0) X(KP_1) X(KP_2) X(KP_3) X(KP_4)
+	X(KP_5) X(KP_6) X(KP_7) X(KP_8) X(KP_9)
+#undef X
+	{ "set2", KEY_SET2 },
+	{ "none", -1 },
 	{ NULL, 0 }
 };
 
@@ -103,36 +146,6 @@ static int str2button(const char *s) {
 
 static int str2key(const char *s) {
 	int a, i;
-	static const struct {
-		const char *name; int val;
-	} tab[] = {
-#define X(name) { #name, XK_##name },
-		X(Left) X(Up) X(Right) X(Down)
-		X(Home) X(Page_Up) X(Page_Down) X(End)
-		X(Insert) X(Delete) X(BackSpace)
-		X(Return) X(Escape) X(Tab)
-		X(space)
-
-		// aliases
-		{ "Enter", XK_Return },
-		{ "Esc", XK_Escape },
-		{ "Shift", XK_Shift_L },
-		{ "Control", XK_Control_L },
-		{ "Ctrl", XK_Control_L },
-		{ "Alt", XK_Alt_L },
-		{ "PgUp", XK_Page_Up },
-		{ "PgDown", XK_Page_Down },
-
-		X(Shift_L) X(Shift_R)
-		X(Control_L) X(Control_R)
-		X(Alt_L) X(Alt_R)
-		X(Caps_Lock)
-		X(F1) X(F2) X(F3) X(F4) X(F5) X(F6)
-		X(F7) X(F8) X(F9) X(F10) X(F11) X(F12)
-#undef X
-		{ "none", -1 },
-		{ NULL, 0 }
-	};
 
 	if (s[0] && !s[1]) return s[0];
 
@@ -141,9 +154,9 @@ static int str2key(const char *s) {
 		return a;
 	}
 
-	for (i = 0; tab[i].name; i++)
-		if (!strcasecmp(s, tab[i].name))
-			return tab[i].val;
+	for (i = 0; key_names[i].name; i++)
+		if (!strcasecmp(s, key_names[i].name))
+			return key_names[i].val;
 
 	ERR_EXIT("unknown key (%s)\n", s);
 	return -1;
@@ -181,17 +194,18 @@ static void sys_gamepad_init(sysctx_t *sys) {
 	sys->js_axes = axes;
 	sys->js_buttons = buttons;
 
-	j = (buttons + axes * 2) * sizeof(*sys->js_map);
+	j = (buttons + axes * 2) * 2 * sizeof(*sys->js_map);
 	if (!(sys->js_map = malloc(j)))
 		ERR_EXIT("malloc failed\n");
 	memset(sys->js_map, -1, j);
+	sys->js_map2 = sys->js_map + buttons + axes * 2;
 
 	j = axes * 2 * sizeof(*sys->js_thr);
 	if (!(sys->js_thr = malloc(j)))
 		ERR_EXIT("malloc failed\n");
 
 	for (i = 0; i < axes; i++) {
-		int x = axmap[i];
+		int x = axmap[i], n, j, *conf;
 		if (sys->verbose >= 1) {
 			const char *name = "???";
 			for (j = 0; axis_names[j].name; j++)
@@ -201,27 +215,34 @@ static void sys_gamepad_init(sysctx_t *sys) {
 				}
 			printf("axis %u: %s (0x%02x)\n", i, name, x);
 		}
-		for (j = 0; j < sys->axes_conf_num; j++) {
-			int k = buttons + i * 2;
-			char **conf = sys->axes_conf + j * 3;
-			if (x != str2axis(conf[0])) continue;
-			sys->js_map[k] = str2key(conf[1]);
-			sys->js_map[k + 1] = str2key(conf[2]);
-			break;
+		for (j = 0; j < 2; j++) {
+			int *map = j ? sys->js_map2 : sys->js_map;
+			conf = sys->axes_conf[j];
+			if (conf)
+			for (n = *conf++; n; n--, conf += 3) {
+				int k = buttons + i * 2;
+				if (x != conf[0]) continue;
+				if (conf[1] == KEY_SET2) sys->btn_set2 = k;
+				map[k] = conf[1];
+				if (conf[2] == KEY_SET2) sys->btn_set2 = k + 1;
+				map[k + 1] = conf[2];
+				break;
+			}
 		}
 		sys->js_thr[i * 2] = -0x4000;
 		sys->js_thr[i * 2 + 1] = 0x4000;
-		for (j = 0; j < sys->thr_conf_num; j++) {
-			char **conf = sys->thr_conf + j * 3;
-			if (x != str2axis(conf[0])) continue;
-			sys->js_thr[i * 2] = str2thr(conf[1]);
-			sys->js_thr[i * 2 + 1] = str2thr(conf[2]);
+		conf = sys->thr_conf;
+		if (conf)
+		for (n = *conf++; n; n--, conf += 3) {
+			if (x != conf[0]) continue;
+			sys->js_thr[i * 2] = conf[1];
+			sys->js_thr[i * 2 + 1] = conf[2];
 			break;
 		}
 	}
 
 	for (i = 0; i < buttons; i++) {
-		int x = btnmap[i];
+		int x = btnmap[i], n, j, *conf;
 		if (sys->verbose >= 1) {
 			const char *name = "???";
 			for (j = 0; button_names[j].name; j++)
@@ -231,24 +252,39 @@ static void sys_gamepad_init(sysctx_t *sys) {
 				}
 			printf("button %u: %s (0x%02x)\n", i, name, x);
 		}
-		for (j = 0; j < sys->buttons_conf_num; j++) {
-			if (x != str2button(sys->buttons_conf[j * 2])) continue;
-			sys->js_map[i] = str2key(sys->buttons_conf[j * 2 + 1]);
-			break;
+		for (j = 0; j < 2; j++) {
+			int *map = j ? sys->js_map2 : sys->js_map;
+			conf = sys->buttons_conf[j];
+			if (conf)
+			for (n = *conf++; n; n--, conf += 2) {
+				if (x != conf[0]) continue;
+				if (conf[1] == KEY_SET2) sys->btn_set2 = i;
+				else map[i] = conf[1];
+				break;
+			}
 		}
 	}
 
 	j = (buttons + axes * 2) * sizeof(*sys->js_state);
-	sys->js_state = malloc(j);
-	if (!sys->js_state) ERR_EXIT("malloc failed\n");
+	if (!(sys->js_state = malloc(j)))
+		ERR_EXIT("malloc failed\n");
 	memset(sys->js_state, 0, j);
 }
 
 static void send_key(sysctx_t *sys, int key, int state) {
 	int keysym, keycode;
-	if (sys->js_state[key] == state) return;
-	sys->js_state[key] = state;
-	keysym = sys->js_map[key];
+	int old_state = sys->js_state[key];
+	int j, *map;
+	if ((old_state & 15) == state) return;
+	if (!state) {
+		j = old_state >> 4;
+	} else {
+		j = sys->btn_set2;
+		j = j == -1 ? 0 : sys->js_state[j] & 1;
+	}
+	sys->js_state[key] = state | j << 4;
+	map = j ? sys->js_map2 : sys->js_map;
+	keysym = map[key];
 	if (sys->verbose >= 2) {
 		const char *type = "button";
 		int val = key;
@@ -271,11 +307,8 @@ static void process_events(sysctx_t *sys) {
 	struct js_event event;
 	for (;;) {
 		int n = read(sys->js_fd, &event, sizeof(event));
-		if (n != sizeof(event)) {
-			close(sys->js_fd);
-			sys->js_fd = -1;
-			break;
-		}
+		if (n != sizeof(event))
+			ERR_EXIT("unexpected joystic event\n");
 		if (event.type == JS_EVENT_BUTTON) {
 			if (event.number >= sys->js_buttons) continue;
 			if (!(event.value & ~1))
@@ -301,6 +334,14 @@ static void test_gamepad(int js_fd) {
 	}
 }
 
+static sysctx_t ctx_glob;
+
+static void sys_cleanup(void) {
+	sysctx_t *sys = &ctx_glob;
+	if (sys->display) XCloseDisplay(sys->display), sys->display = NULL;
+	if (sys->js_fd >= 0) close(sys->js_fd), sys->js_fd = -1;
+}
+
 static void display_help(const char *progname) {
 	printf(
 "Usage: %s [options]\n"
@@ -317,16 +358,39 @@ static void display_help(const char *progname) {
 "\n", progname);
 }
 
+static int parse_list(int argc, char **argv, int **res, int cols,
+		int (*fn1)(const char*), int (*fn2)(const char*)) {
+	int i, j, n = 0, *p;
+	char **conf = argv + 2;
+	if (*res)
+		ERR_EXIT("%s list is already specified\n", argv[1] + 2);
+	argc -= 1; argv += 1;
+	while (argc > cols) {
+		if (argv[1][0] == '-' && argv[1][1]) break;
+		argc -= cols; argv += cols; n++;
+	}
+	if (!(p = malloc((n * cols + 1) * sizeof(int))))
+		ERR_EXIT("malloc failed\n");
+	*res = p; *p++ = n;
+	for (i = 0; i < n; i++) {
+		*p++ = fn1(*conf++);
+		for (j = 1; j < cols; j++)
+			*p++ = fn2(*conf++);
+	}
+	return n * cols + 1;
+}
+
 int main(int argc, char **argv) {
-	sysctx_t ctx;
+	sysctx_t *sys = &ctx_glob;
 	const char *js_fn = "/dev/input/js0";
 	const char *display_name = NULL;
 	int test = 0;
 	const char *progname = argv[0];
 
-	memset(&ctx, 0, sizeof(ctx));
-
-	ctx.verbose = 1;
+	memset(sys, 0, sizeof(*sys));
+	sys->js_fd = -1;
+	sys->verbose = 1;
+	sys->btn_set2 = -1;
 
 	if (argc == 1) {
 		display_help(progname);
@@ -340,39 +404,27 @@ int main(int argc, char **argv) {
 			argc -= 2; argv += 2;
 		} else if (!strcmp(argv[1], "--verbose")) {
 			if (argc <= 2) ERR_EXIT("bad option\n");
-			ctx.verbose = atoi(argv[2]);
+			sys->verbose = atoi(argv[2]);
 			argc -= 2; argv += 2;
 		} else if (!strcmp(argv[1], "--display")) {
 			if (argc <= 2) ERR_EXIT("bad option\n");
 			display_name = argv[2];
 			argc -= 2; argv += 2;
 		} else if (!strcmp(argv[1], "--buttons")) {
-			int n = 0;
-			argc -= 1; argv += 1;
-			ctx.buttons_conf = argv + 1;
-			while (argc > 2) {
-				if (argv[1][0] == '-' && argv[1][1]) break;
-				argc -= 2; argv += 2; n++;
-			}
-			ctx.buttons_conf_num = n;
+			int n = parse_list(argc, argv, &sys->buttons_conf[0], 2, str2button, str2key);
+			argc -= n; argv += n;
 		} else if (!strcmp(argv[1], "--axes")) {
-			int n = 0;
-			argc -= 1; argv += 1;
-			ctx.axes_conf = argv + 1;
-			while (argc > 3) {
-				if (argv[1][0] == '-' && argv[1][1]) break;
-				argc -= 3; argv += 3; n++;
-			}
-			ctx.axes_conf_num = n;
+			int n = parse_list(argc, argv, &sys->axes_conf[0], 3, str2axis, str2key);
+			argc -= n; argv += n;
+		} else if (!strcmp(argv[1], "--buttons2")) {
+			int n = parse_list(argc, argv, &sys->buttons_conf[1], 2, str2button, str2key);
+			argc -= n; argv += n;
+		} else if (!strcmp(argv[1], "--axes2")) {
+			int n = parse_list(argc, argv, &sys->axes_conf[1], 3, str2axis, str2key);
+			argc -= n; argv += n;
 		} else if (!strcmp(argv[1], "--axes_thr")) {
-			int n = 0;
-			argc -= 1; argv += 1;
-			ctx.thr_conf = argv + 1;
-			while (argc > 3) {
-				if (argv[1][0] == '-' && argv[1][1]) break;
-				argc -= 3; argv += 3; n++;
-			}
-			ctx.thr_conf_num = n;
+			int n = parse_list(argc, argv, &sys->thr_conf, 3, str2axis, str2thr);
+			argc -= n; argv += n;
 		} else if (!strcmp(argv[1], "--test")) {
 			test = 1;
 			argc -= 1; argv += 1;
@@ -382,15 +434,19 @@ int main(int argc, char **argv) {
 		} else ERR_EXIT("unknown option\n");
 	}
 
-	ctx.js_fd = open(js_fn, O_RDONLY);
-	if (ctx.js_fd < 0)
+	sys->js_fd = open(js_fn, O_RDONLY);
+	if (sys->js_fd < 0)
 		ERR_EXIT("open(\"%s\") failed\n", js_fn);
-	sys_gamepad_init(&ctx);
-	if (test) test_gamepad(ctx.js_fd);
+	sys_gamepad_init(sys);
 
-	ctx.display = XOpenDisplay(display_name);
-	if (!ctx.display) ERR_EXIT("XOpenDisplay failed\n");
-	process_events(&ctx);
-	// TODO: unreachable
- 	XCloseDisplay(ctx.display);
+	atexit(sys_cleanup);
+
+	if (test) {
+		test_gamepad(sys->js_fd);
+	} else {
+		sys->display = XOpenDisplay(display_name);
+		if (!sys->display) ERR_EXIT("XOpenDisplay failed\n");
+		process_events(sys);
+	}
+	return 0;
 }
