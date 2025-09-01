@@ -352,9 +352,11 @@ static void display_help(const char *progname) {
 "                      (default is \"/dev/input/js0\")\n"
 "  --display X       To specify X11 display\n"
 "  --test            Print raw gamepad input\n"
-"  --buttons  BTN1 KEY1  BTN2 KEY2...\n"
+"  --buttons  BTN1 KEY1  BTN2 KEY2 ...\n"
 "  --axes  AXIS1 KEY1 KEY2  AXIS2 KEY3 KEY4 ...\n"
 "  --axes_thr  AXIS1 THR1 THR2  AXIS2 THR3 THR4 ...\n"
+"  --buttons2 list   Used when \"Set2\" key is down\n"
+"  --axes2 list      Used when \"Set2\" key is down\n"
 "\n", progname);
 }
 
