@@ -61,6 +61,8 @@ static const struct {
 	const char *name; int val;
 } button_names[] = {
 #define X(name) { #name, BTN_##name },
+	X(TRIGGER) X(THUMB) X(THUMB2) X(TOP) X(TOP2) X(PINKIE)
+	X(BASE) X(BASE2) X(BASE3) X(BASE4) X(BASE5) X(BASE6)
 	X(A) X(B) X(C) X(X) X(Y) X(Z)
 	X(TL) X(TR) X(TL2) X(TR2)
 	X(SELECT) X(START) X(MODE)
@@ -70,6 +72,7 @@ static const struct {
 };
 
 #define KEY_SET2 -2
+#define KEY_MOUSE 0x1000000
 
 static const struct {
 	const char *name; int val;
@@ -108,6 +111,20 @@ static const struct {
 	X(KP_5) X(KP_6) X(KP_7) X(KP_8) X(KP_9)
 #undef X
 	{ "set2", KEY_SET2 },
+	{ "mb1", KEY_MOUSE + 1 },
+	{ "mb2", KEY_MOUSE + 2 },
+	{ "mb3", KEY_MOUSE + 3 },
+	{ "mwup", KEY_MOUSE + 4 },
+	{ "mwdn", KEY_MOUSE + 5 },
+	{ "mouse1", KEY_MOUSE + 1 },
+	{ "mouse2", KEY_MOUSE + 2 },
+	{ "mouse3", KEY_MOUSE + 3 },
+	{ "mouse4", KEY_MOUSE + 4 },
+	{ "mouse5", KEY_MOUSE + 5 },
+	{ "mouse6", KEY_MOUSE + 6 },
+	{ "mouse7", KEY_MOUSE + 7 },
+	{ "mouse8", KEY_MOUSE + 8 },
+	{ "mouse9", KEY_MOUSE + 9 },
 	{ "none", -1 },
 	{ NULL, 0 }
 };
@@ -297,9 +314,13 @@ static void send_key(sysctx_t *sys, int key, int state) {
 		printf("\n");
 	}
 	if (keysym == -1) return;
-	keycode = XKeysymToKeycode(sys->display, keysym);
-	if (!keycode) return;
-	XTestFakeKeyEvent(sys->display, keycode, state, 0);
+	if ((unsigned)(keysym - KEY_MOUSE) < 16) {
+		XTestFakeButtonEvent(sys->display, keysym - KEY_MOUSE, state, 0);
+	} else {
+		keycode = XKeysymToKeycode(sys->display, keysym);
+		if (!keycode) return;
+		XTestFakeKeyEvent(sys->display, keycode, state, 0);
+	}
  	XSync(sys->display, False);
 }
 
