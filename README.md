@@ -40,9 +40,9 @@ btn_start=BASE4
       $btn_start Set2  $btn_select mwup \
     --buttons2  $btn_left Left  $btn_down Down  $btn_up Up  $btn_right Right \
       $btn_square Caps_Lock  $btn_triangle Tab  $btn_cross Escape  $btn_circle Enter \
-      $btn_select mwdn 
+      $btn_select mwdn
 ```
 
-This dancepad also has a key in the center, you can bind it using `--axis Y none <something>`.
+This dancepad also has a key in the center, you can bind it using `--axes Y none <something>`.
 
 
