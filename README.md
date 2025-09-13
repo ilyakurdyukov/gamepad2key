@@ -2,6 +2,8 @@
 
 Requires X11 and Xtst headers and libraries.
 
+* On `x86_64` you can use `make NODEV=1` to compile without dev packages, just having the libraries.
+
 ### Gamepad Example
 
 ```
