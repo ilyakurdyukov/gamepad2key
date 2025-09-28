@@ -24,7 +24,10 @@ Example for the cheapest dancepad, `lsusb` lists it as:
 
 A similar layout was used with `prboom+` at the celebration on September 6, 2025 at the Dmitry Bachilo Museum.
 
+`/home/user/gamepad2key/run.sh`:
 ```
+#!/bin/sh
+
 btn_left=TRIGGER
 btn_down=THUMB
 btn_up=THUMB2
@@ -36,13 +39,19 @@ btn_circle=BASE2
 btn_select=BASE3
 btn_start=BASE4
 
-  ./gamepad2key --dev /dev/input/js1 \
-    --buttons  $btn_left "a"  $btn_down "s"  $btn_up "w"  $btn_right "d" \
-      $btn_square Right  $btn_triangle Left  $btn_cross Control  $btn_circle Space \
-      $btn_start Set2  $btn_select mwup \
-    --buttons2  $btn_left Left  $btn_down Down  $btn_up Up  $btn_right Right \
-      $btn_square Caps_Lock  $btn_triangle Tab  $btn_cross Escape  $btn_circle Enter \
-      $btn_select mwdn
+./gamepad2key --dev /dev/input/by-id/usb-0079_USB_Gamepad-joystick \
+  --buttons  $btn_left "a"  $btn_down "s"  $btn_up "w"  $btn_right "d" \
+    $btn_square Right  $btn_triangle Left  $btn_cross Control  $btn_circle Space \
+    $btn_start Set2  $btn_select mwup \
+  --buttons2  $btn_left Left  $btn_down Down  $btn_up Up  $btn_right Right \
+    $btn_square Caps_Lock  $btn_triangle Tab  $btn_cross Escape  $btn_circle Enter \
+    $btn_select mwdn \
+	--display ":0" --verbose 0
+```
+
+`/etc/udev/rules.d/80-dancepad.rules`:
+```
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0079", ATTRS{idProduct}=="0011", RUN="/bin/su user -c 'sleep 1 ; cd /home/user/gamepad2key && ./run.sh'"
 ```
 
 This dancepad also has a key in the center, you can bind it using `--axes Y none <something>`.

@@ -16,7 +16,7 @@ int XCloseDisplay(Display*);
 int XSync(Display*, Bool);
 
 typedef unsigned CARD32;
-typedef unsigned char  CARD8;
+typedef unsigned char CARD8;
 
 #define KeyCode CARD8
 #define KeySym CARD32
