@@ -208,6 +208,15 @@ static void sys_gamepad_init(sysctx_t *sys) {
 	if (ioctl(sys->js_fd, JSIOCGBTNMAP, btnmap) < 0)
 		ERR_EXIT("ioctl(JSIOCGBTNMAP) failed\n");
 
+	if (sys->verbose >= 1) {
+		int version;
+		char name[128 + 1] = { 0 };
+		if (ioctl(sys->js_fd, JSIOCGVERSION, &version) >= 0)
+			printf("version: 0x%x\n", version);
+		if (ioctl(sys->js_fd, JSIOCGNAME(128), &name) >= 0)
+			printf("name: \"%s\"\n", name);
+	}
+
 	sys->js_axes = axes;
 	sys->js_buttons = buttons;
 
