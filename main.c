@@ -13,6 +13,22 @@
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
 
+#ifdef DUMMY_X11
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#define ATTR __attribute__((visibility("hidden")))
+ATTR Display *XOpenDisplay(_Xconst char *display_name) { return (Display*)""; }
+ATTR int XCloseDisplay(Display *display) { return 0; }
+ATTR int XSync(Display *display, Bool discard) { return 0; }
+ATTR KeyCode XKeysymToKeycode(Display *display, KeySym keysym) { return 0; }
+ATTR int XTestFakeKeyEvent(Display *display, unsigned int keycode,
+		Bool is_press, unsigned long delay) { return 0; }
+ATTR int XTestFakeButtonEvent(Display *display, unsigned int button,
+		Bool is_press, unsigned long delay) { return 0; }
+#undef ATTR
+#pragma GCC diagnostic pop
+#endif
+
 #define ERR_EXIT(...) \
 	do { fprintf(stderr, __VA_ARGS__); exit(1); } while (0)
 

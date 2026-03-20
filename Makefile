@@ -2,7 +2,10 @@
 CFLAGS = -O2 -Wall -Wextra -std=c99 -pedantic
 APPNAME = gamepad2key
 NODEV = 0
-ifeq ($(NODEV), 1)
+DUMMY = 0 # useful for testing controllers
+ifeq ($(DUMMY), 1)
+CFLAGS += -IX11mini -DDUMMY_X11
+else ifeq ($(NODEV), 1)
 CFLAGS += -IX11mini
 LIBDIR = /usr/lib/x86_64-linux-gnu
 LIBS = $(LIBDIR)/libX11.so.6 $(LIBDIR)/libXtst.so.6
